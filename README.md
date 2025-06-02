@@ -34,8 +34,7 @@
 ```bash
 UptownVoiceAssistant/
 │
-├── Program.cs           # Entry point with minimal API
-├── Controllers/         # Endpoint logic (e.g., /voice/welcome)
+├── Program.cs           # Entry point with all logic via minimal API
 ├── Services/            # (Optional) API client for OscarAppointment
 ├── Helpers/             # Twilio utilities or validators
 └── README.md
