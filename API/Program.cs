@@ -48,8 +48,7 @@ string BuildPublicUrl(HttpRequest req, string relativePath)
 // ----------------- Welcome (DTMF gather) -----------------
 app.MapPost("/voice/welcome", (HttpRequest request, ILogger<Program> logger) =>
 {
-    // Build an action URL that Twilio can reach (uses x-forwarded-* if available)
-    var actionAbsolute = BuildPublicUrl(request, "/voice/process");
+    var actionAbsolute = BuildPublicUrl(request, "/voice/process-hcn");
 
     var response = new VoiceResponse();
 
@@ -67,55 +66,34 @@ app.MapPost("/voice/welcome", (HttpRequest request, ILogger<Program> logger) =>
 
     // If gather returns with no digits
     response.Say("We did not receive any input.", voice: "Polly.Joanna");
-    // Redirect back to the public URL for welcome (so Twilio will call the same public host)
-    var redirectUrl = BuildPublicUrl(request, "/voice/welcome");
-    response.Redirect(new Uri(redirectUrl), method: "POST");
+    response.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
 
     logger.LogInformation("Returning TwiML for /voice/welcome with action={Action}", actionAbsolute);
     return Results.Content(response.ToString(), "application/xml");
 });
 
-// ----------------- Process (log everything and handle errors) -----------------
-app.MapPost("/voice/process", async (HttpRequest request, ILogger<Program> logger) =>
+// ----------------- Process HCN (validate and ask for DOB) -----------------
+app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> logger) =>
 {
     try
     {
-        // Read raw body again (middleware already buffered) and parsed form
-        request.EnableBuffering();
-        string raw = "";
-        if (request.ContentLength > 0)
-        {
-            using var r = new StreamReader(request.Body, leaveOpen: true);
-            raw = await r.ReadToEndAsync();
-            request.Body.Position = 0;
-        }
-
         var form = await request.ReadFormAsync();
-
-        // Log parsed form fields (very explicit)
-        logger.LogInformation("---- /voice/process invoked ----");
-        foreach (var kv in form)
-            logger.LogInformation("Form field: {Key} = {Value}", kv.Key, kv.Value.ToString());
-        logger.LogInformation("Raw body (again): {Raw}", string.IsNullOrEmpty(raw) ? "<empty>" : raw);
+        foreach (var kv in form) logger.LogInformation("Form field: {Key} = {Value}", kv.Key, kv.Value.ToString());
 
         var digits = form["Digits"].ToString();
         var from = form["From"].ToString();
-
         logger.LogInformation("Parsed Digits='{Digits}', From='{From}'", digits, from);
 
-        // Defensive sanitize
         var clean = new string((digits ?? "").Where(char.IsDigit).ToArray());
         if (clean.Length != 10)
         {
             logger.LogWarning("Invalid digits length: {Len} (raw: {RawDigits})", clean.Length, digits);
             var respBad = new VoiceResponse();
             respBad.Say("The number you entered does not appear to be ten digits. Please try again.", voice: "Polly.Joanna");
-            var redirectUrl = BuildPublicUrl(request, "/voice/welcome");
-            respBad.Redirect(new Uri(redirectUrl), method: "POST");
+            respBad.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
             return Results.Content(respBad.ToString(), "application/xml");
         }
 
-        // TODO: validate against DB/service
         var isValid = await ValidateHCNAsync(clean);
         if (!isValid)
         {
@@ -128,26 +106,162 @@ app.MapPost("/voice/process", async (HttpRequest request, ILogger<Program> logge
 
         logger.LogInformation("HCN validated: {HCN}", clean);
 
-        var response = new VoiceResponse();
-        response.Say("Great. We've found your records. Please leave a detailed message including your name and number.", voice: "Polly.Joanna");
-        response.Record(maxLength: 120, action: new Uri(BuildPublicUrl(request, "/voice/recording-complete")), method: "POST");
+        // Save HCN in session-like way? Twilio doesn't maintain session: we pass HCN forward via query string on action URLs.
+        var actionDob = BuildPublicUrl(request, $"/voice/process-dob?hcn={clean}");
 
-        return Results.Content(response.ToString(), "application/xml");
+        var resp = new VoiceResponse();
+        // Gather DOB as 8 digits YYYYMMDD
+        var gatherDob = new Gather(
+            input: new[] { Gather.InputEnum.Dtmf },
+            numDigits: 8,
+            action: new Uri(actionDob),
+            method: "POST",
+            timeout: 10,
+            finishOnKey: "#"
+        );
+
+        gatherDob.Say("Great. To confirm your record, please enter your birth date using eight digits. For example, enter year, month, day. For June first 1985, enter one nine eight five zero six zero one. Then press the pound key.", voice: "Polly.Joanna");
+        resp.Append(gatherDob);
+
+        resp.Say("We did not receive your birth date.", voice: "Polly.Joanna");
+        resp.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
+
+        return Results.Content(resp.ToString(), "application/xml");
     }
     catch (Exception ex)
     {
-        // Log full exception details
-        logger.LogError(ex, "Unhandled exception in /voice/process: {Message}", ex.Message);
-
+        logger.LogError(ex, "Unhandled exception in /voice/process-hcn");
         var err = new VoiceResponse();
         err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Polly.Joanna");
         err.Hangup();
-
-        // Return TwiML error and a 200 body (Twilio expects valid TwiML)
         return Results.Content(err.ToString(), "application/xml");
     }
 });
 
+// ----------------- Process DOB (validate and ask for name via speech) -----------------
+app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> logger) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        foreach (var kv in form) logger.LogInformation("Form field: {Key} = {Value}", kv.Key, kv.Value.ToString());
+
+        var digits = form["Digits"].ToString();
+        var from = form["From"].ToString();
+        logger.LogInformation("Received DOB Digits='{Digits}', From='{From}'", digits, from);
+
+        // get HCN from query string (we passed it)
+        var hcn = request.Query["hcn"].ToString();
+        logger.LogInformation("HCN from query string: {HCN}", hcn);
+
+        var clean = new string((digits ?? "").Where(char.IsDigit).ToArray());
+        if (clean.Length != 8)
+        {
+            logger.LogWarning("Invalid DOB digits length: {Len} (raw: {RawDigits})", clean.Length, digits);
+            var respBad = new VoiceResponse();
+            respBad.Say("The date you entered does not appear to be eight digits. Please try again.", voice: "Polly.Joanna");
+            respBad.Redirect(new Uri(BuildPublicUrl(request, $"/voice/process-hcn")), method: "POST");
+            return Results.Content(respBad.ToString(), "application/xml");
+        }
+
+        // parse YYYYMMDD
+        if (!DateTime.TryParseExact(clean, "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dob))
+        {
+            logger.LogWarning("DOB parse failed for input: {Input}", clean);
+            var respBad = new VoiceResponse();
+            respBad.Say("We could not interpret that date. Please try again.", voice: "Polly.Joanna");
+            respBad.Redirect(new Uri(BuildPublicUrl(request, $"/voice/process-hcn")), method: "POST");
+            return Results.Content(respBad.ToString(), "application/xml");
+        }
+
+        // Convert to ISO 8601 string($date-time)
+        var dobIso = dob.ToString("o"); // ISO 8601 with offset
+        logger.LogInformation("Parsed DOB: {DOB} (ISO: {DOBIso})", dob, dobIso);
+
+        // Ask for first and last name via speech
+        var actionName = BuildPublicUrl(request, $"/voice/process-name?hcn={hcn}&dob={Uri.EscapeDataString(dobIso)}");
+
+        var resp = new VoiceResponse();
+        var gatherName = new Gather(
+            input: new[] { Gather.InputEnum.Speech },
+            action: new Uri(actionName),
+            method: "POST",
+            timeout: 5,
+            speechTimeout: "auto",
+            hints: "first name, last name" // optional
+        );
+
+        gatherName.Say("Thank you. Please clearly say your first name and last name after the tone. For example, John Smith.", voice: "Polly.Joanna");
+        resp.Append(gatherName);
+
+        resp.Say("We did not receive your name.", voice: "Polly.Joanna");
+        resp.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
+
+        return Results.Content(resp.ToString(), "application/xml");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Unhandled exception in /voice/process-dob");
+        var err = new VoiceResponse();
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Polly.Joanna");
+        err.Hangup();
+        return Results.Content(err.ToString(), "application/xml");
+    }
+});
+
+// ----------------- Process Name (finalize & log everything) -----------------
+app.MapPost("/voice/process-name", async (HttpRequest request, ILogger<Program> logger) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        foreach (var kv in form) logger.LogInformation("Form field: {Key} = {Value}", kv.Key, kv.Value.ToString());
+
+        var speech = form["SpeechResult"].ToString();
+        var from = form["From"].ToString();
+        var hcn = request.Query["hcn"].ToString();
+        var dobIso = request.Query["dob"].ToString(); // ISO string passed via query
+
+        logger.LogInformation("Final collected values: HCN={HCN}, DOB={DOBIso}, SpeechResult={Speech}, From={From}",
+            hcn, dobIso, speech, from);
+
+        // Attempt to split speech into first/last (best-effort)
+        string firstName = null, lastName = null;
+        if (!string.IsNullOrWhiteSpace(speech))
+        {
+            var parts = speech.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
+            {
+                firstName = parts[0];
+                lastName = string.Join(' ', parts.Skip(1));
+            }
+            else if (parts.Length == 1)
+            {
+                firstName = parts[0];
+            }
+        }
+
+        logger.LogInformation("Parsed name: FirstName={First}, LastName={Last}", firstName ?? "<unknown>", lastName ?? "<unknown>");
+
+        // At this point you have:
+        //   hcn (10-digit), dobIso (ISO 8601 string), firstName, lastName, and the raw speech.
+        // Log them (already logged above) and proceed to respond.
+
+        var resp = new VoiceResponse();
+        resp.Say($"Thank you {firstName ?? "caller"}. We have recorded your details. Goodbye.", voice: "Polly.Joanna");
+        resp.Hangup();
+
+        return Results.Content(resp.ToString(), "application/xml");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Unhandled exception in /voice/process-name");
+        var err = new VoiceResponse();
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Polly.Joanna");
+        err.Hangup();
+        return Results.Content(err.ToString(), "application/xml");
+    }
+});
 // recording-complete = same robust logging
 app.MapPost("/voice/recording-complete", async (HttpRequest request, ILogger<Program> logger) =>
 {
