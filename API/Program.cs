@@ -61,11 +61,11 @@ app.MapPost("/voice/welcome", (HttpRequest request, ILogger<Program> logger) =>
         finishOnKey: "#"
     );
 
-    gather.Say("Welcome to Uptown Eye Specialists. Please enter your ten digit health card number using your keypad followed by the pound key.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+    gather.Say("Welcome to Uptown Eye Specialists. Please enter your ten digit health card number using your keypad followed by the pound key.", voice: "Google.en-US-Chirp3-HD-Leda");
     response.Append(gather);
 
     // If gather returns with no digits
-    response.Say("We did not receive any input.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+    response.Say("We did not receive any input.", voice: "Google.en-US-Chirp3-HD-Leda");
     response.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
 
     logger.LogInformation("Returning TwiML for /voice/welcome with action={Action}", actionAbsolute);
@@ -89,7 +89,7 @@ app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> l
         {
             logger.LogWarning("Invalid digits length: {Len} (raw: {RawDigits})", clean.Length, digits);
             var respBad = new VoiceResponse();
-            respBad.Say("The number you entered does not appear to be ten digits. Please try again.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+            respBad.Say("The number you entered does not appear to be ten digits. Please try again.", voice: "Google.en-US-Chirp3-HD-Leda");
             respBad.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
             return Results.Content(respBad.ToString(), "application/xml");
         }
@@ -99,7 +99,7 @@ app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> l
         {
             logger.LogInformation("HCN not found: {HCN}", clean);
             var respNotFound = new VoiceResponse();
-            respNotFound.Say("We couldn't find records for that number. Please try again.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+            respNotFound.Say("We couldn't find records for that number. Please try again.", voice: "Google.en-US-Chirp3-HD-Leda");
             respNotFound.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
             return Results.Content(respNotFound.ToString(), "application/xml");
         }
@@ -120,10 +120,10 @@ app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> l
             finishOnKey: "#"
         );
 
-        gatherDob.Say("Great. To confirm your record, please enter your birth date using eight digits. For example, enter year, month, day. For June first 1985, enter one nine eight five zero six zero one. Then press the pound key.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        gatherDob.Say("Great. To confirm your record, please enter your birth date using eight digits. For example, enter year, month, day. For June first 1985, enter one nine eight five zero six zero one. Then press the pound key.", voice: "Google.en-US-Chirp3-HD-Leda");
         resp.Append(gatherDob);
 
-        resp.Say("We did not receive your birth date.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        resp.Say("We did not receive your birth date.", voice: "Google.en-US-Chirp3-HD-Leda");
         resp.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
 
         return Results.Content(resp.ToString(), "application/xml");
@@ -132,7 +132,7 @@ app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> l
     {
         logger.LogError(ex, "Unhandled exception in /voice/process-hcn");
         var err = new VoiceResponse();
-        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Leda");
         err.Hangup();
         return Results.Content(err.ToString(), "application/xml");
     }
@@ -159,7 +159,7 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
         {
             logger.LogWarning("Invalid DOB digits length: {Len} (raw: {RawDigits})", clean.Length, digits);
             var respBad = new VoiceResponse();
-            respBad.Say("The date you entered does not appear to be eight digits. Please try again.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+            respBad.Say("The date you entered does not appear to be eight digits. Please try again.", voice: "Google.en-US-Chirp3-HD-Leda");
             respBad.Redirect(new Uri(BuildPublicUrl(request, $"/voice/process-hcn")), method: "POST");
             return Results.Content(respBad.ToString(), "application/xml");
         }
@@ -169,7 +169,7 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
         {
             logger.LogWarning("DOB parse failed for input: {Input}", clean);
             var respBad = new VoiceResponse();
-            respBad.Say("We could not interpret that date. Please try again.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+            respBad.Say("We could not interpret that date. Please try again.", voice: "Google.en-US-Chirp3-HD-Leda");
             respBad.Redirect(new Uri(BuildPublicUrl(request, $"/voice/process-hcn")), method: "POST");
             return Results.Content(respBad.ToString(), "application/xml");
         }
@@ -194,7 +194,7 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
         gatherName.Say("Thank you. Please clearly say your first name and last name after the tone. For example, John Smith.", voice: "Polly.Joanna");
         resp.Append(gatherName);
 
-        resp.Say("We did not receive your name.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        resp.Say("We did not receive your name.", voice: "Google.en-US-Chirp3-HD-Leda");
         resp.Redirect(new Uri(BuildPublicUrl(request, "/voice/welcome")), method: "POST");
 
         return Results.Content(resp.ToString(), "application/xml");
@@ -203,7 +203,7 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
     {
         logger.LogError(ex, "Unhandled exception in /voice/process-dob");
         var err = new VoiceResponse();
-        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Leda");
         err.Hangup();
         return Results.Content(err.ToString(), "application/xml");
     }
@@ -248,7 +248,7 @@ app.MapPost("/voice/process-name", async (HttpRequest request, ILogger<Program> 
         // Log them (already logged above) and proceed to respond.
 
         var resp = new VoiceResponse();
-        resp.Say($"Thank you {firstName ?? "caller"}. We have recorded your details. Goodbye.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        resp.Say($"Thank you {firstName ?? "caller"}. We have recorded your details. Goodbye.", voice: "Google.en-US-Chirp3-HD-Leda");
         resp.Hangup();
 
         return Results.Content(resp.ToString(), "application/xml");
@@ -257,7 +257,7 @@ app.MapPost("/voice/process-name", async (HttpRequest request, ILogger<Program> 
     {
         logger.LogError(ex, "Unhandled exception in /voice/process-name");
         var err = new VoiceResponse();
-        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Leda");
         err.Hangup();
         return Results.Content(err.ToString(), "application/xml");
     }
@@ -275,7 +275,7 @@ app.MapPost("/voice/recording-complete", async (HttpRequest request, ILogger<Pro
         logger.LogInformation("Caller: {Caller}, RecordingUrl: {RecordingUrl}", caller, recordingUrl);
 
         var response = new VoiceResponse();
-        response.Say("Thank you for your message. Goodbye!", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        response.Say("Thank you for your message. Goodbye!", voice: "Google.en-US-Chirp3-HD-Leda");
         response.Hangup();
         return Results.Content(response.ToString(), "application/xml");
     }
@@ -283,7 +283,7 @@ app.MapPost("/voice/recording-complete", async (HttpRequest request, ILogger<Pro
     {
         logger.LogError(ex, "Unhandled exception in /voice/recording-complete");
         var err = new VoiceResponse();
-        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Autonoe");
+        err.Say("We are sorry — an application error has occurred. Please try again later.", voice: "Google.en-US-Chirp3-HD-Leda");
         err.Hangup();
         return Results.Content(err.ToString(), "application/xml");
     }
