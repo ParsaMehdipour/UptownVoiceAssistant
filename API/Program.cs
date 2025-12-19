@@ -191,7 +191,7 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
             hints: "first name, last name" // optional
         );
 
-        gatherName.Say("Thank you. Please clearly say your first name and last name after the tone. For example, John Smith.", voice: "Polly.Joanna");
+        gatherName.Say("Thank you. Please clearly say your first name and last name after the tone. For example, John Smith.", voice: "Google.en-US-Chirp3-HD-Leda");
         resp.Append(gatherName);
 
         resp.Say("We did not receive your name.", voice: "Google.en-US-Chirp3-HD-Leda");
