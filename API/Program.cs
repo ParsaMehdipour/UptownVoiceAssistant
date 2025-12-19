@@ -58,7 +58,8 @@ app.MapPost("/voice/welcome", (HttpRequest request, ILogger<Program> logger) =>
         action: new Uri(actionAbsolute),
         method: "POST",
         timeout: 10,
-        finishOnKey: "#"
+        finishOnKey: "#",
+        speechModel: "googlev2_telephony"
     );
 
     gather.Say("Welcome to Uptown Eye Specialists. Please enter your ten digit health card number using your keypad followed by the pound key.", voice: "Google.en-US-Chirp3-HD-Leda");
@@ -117,7 +118,8 @@ app.MapPost("/voice/process-hcn", async (HttpRequest request, ILogger<Program> l
             action: new Uri(actionDob),
             method: "POST",
             timeout: 10,
-            finishOnKey: "#"
+            finishOnKey: "#",
+            speechModel: "googlev2_telephony"
         );
 
         gatherDob.Say("Great. To confirm your record, please enter your birth date using eight digits. For example, enter year, month, day. For June first 1985, enter one nine eight five zero six zero one. Then press the pound key.", voice: "Google.en-US-Chirp3-HD-Leda");
@@ -188,7 +190,8 @@ app.MapPost("/voice/process-dob", async (HttpRequest request, ILogger<Program> l
             method: "POST",
             timeout: 5,
             speechTimeout: "auto",
-            hints: "first name, last name" // optional
+            hints: "first name, last name", // optional
+            speechModel: "googlev2_telephony"
         );
 
         gatherName.Say("Thank you. Please clearly say your first name and last name after the tone. For example, John Smith.", voice: "Google.en-US-Chirp3-HD-Leda");
